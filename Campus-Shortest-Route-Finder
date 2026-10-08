@@ -1,0 +1,214 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+ 
+#define MAX 20
+#define INF 99999
+#define NAME_LEN 30
+ 
+typedef struct {
+    int  n;
+    char names[MAX][NAME_LEN];
+    int  adj[MAX][MAX];
+} Graph;
+ 
+typedef struct {
+    int source;
+    int dist[MAX];
+    int parent[MAX];
+    int done;
+} Result;
+ 
+int getInt(const char *prompt, int lo, int hi)
+{
+    char buf[100]; int v;
+    while (1) {
+        printf("%s", prompt);
+        if (!fgets(buf, sizeof(buf), stdin)) { printf("\nInput closed.\n"); exit(0); }
+        if (sscanf(buf, "%d", &v) == 1 && v >= lo && v <= hi) return v;
+        printf("  Invalid! Enter a number from %d to %d.\n", lo, hi);
+    }
+}
+ 
+void getName(const char *prompt, char *dest)
+{
+    char buf[100];
+    while (1) {
+        printf("%s", prompt);
+        if (!fgets(buf, sizeof(buf), stdin)) { printf("\nInput closed.\n"); exit(0); }
+        buf[strcspn(buf, "\n")] = '\0';
+        if (buf[0]) { strncpy(dest, buf, NAME_LEN - 1); dest[NAME_LEN - 1] = '\0'; return; }
+        printf("  Name cannot be empty.\n");
+    }
+}
+ 
+void initGraph(Graph *g, int n)
+{
+    int i, j;
+    g->n = n;
+    for (i = 0; i < MAX; i++)
+        for (j = 0; j < MAX; j++) g->adj[i][j] = (i == j) ? 0 : INF;
+}
+ 
+void addRoad(Graph *g, int u, int v, int w)
+{
+    g->adj[u][v] = w;
+    g->adj[v][u] = w;
+}
+ 
+void loadSample(Graph *g, Result *r)
+{
+    const char *nm[5] = {"Main Gate", "Library", "Computer Department", "Laboratory", "Auditorium"};
+    int e[7][3] = {{0,1,4},{1,2,3},{2,3,2},{3,4,3},{0,3,11},{1,4,10},{2,4,6}};
+    int i;
+    initGraph(g, 5);
+    for (i = 0; i < 5; i++) strcpy(g->names[i], nm[i]);
+    for (i = 0; i < 7; i++) addRoad(g, e[i][0], e[i][1], e[i][2]);
+    r->source = -1; r->done = 0;
+    printf("\nSample campus graph loaded.\n");
+}
+ 
+int enterGraph(Graph *g, Result *r)
+{
+    int i, n, roads, u, v, w;
+    char prompt[100];
+ 
+    printf("\n  1. Enter manually\n  2. Load sample campus graph\n");
+    if (getInt("  Choice: ", 1, 2) == 2) { loadSample(g, r); return 1; }
+ 
+    n = getInt("Number of locations (2-20): ", 2, MAX);
+    initGraph(g, n);
+    for (i = 0; i < n; i++) {
+        sprintf(prompt, "Name of location %d: ", i + 1);
+        getName(prompt, g->names[i]);
+    }
+    roads = getInt("Number of roads (two-way): ", 0, n * (n - 1) / 2);
+    for (i = 0; i < roads; i++) {
+        printf("Road %d:\n", i + 1);
+        u = getInt("  Location no. (from): ", 1, n);
+        v = getInt("  Location no. (to)  : ", 1, n);
+        if (u == v) { printf("  Self-loop ignored.\n"); i--; continue; }
+        w = getInt("  Distance: ", 0, INF - 1);
+        addRoad(g, u - 1, v - 1, w);
+    }
+    r->source = -1; r->done = 0;
+    printf("\nGraph entered.\n");
+    return 1;
+}
+ 
+void displayMatrix(const Graph *g)
+{
+    int i, j;
+    printf("\nAdjacency Matrix (INF = no direct road):\n\n%-5s", "");
+    for (j = 0; j < g->n; j++) printf("%6d", j + 1);
+    printf("\n");
+    for (i = 0; i < g->n; i++) {
+        printf("%-5d", i + 1);
+        for (j = 0; j < g->n; j++) {
+            if (g->adj[i][j] == INF) printf("%6s", "INF");
+            else                     printf("%6d", g->adj[i][j]);
+        }
+        printf("   <- %s\n", g->names[i]);
+    }
+}
+ 
+void selectSource(const Graph *g, Result *r)
+{
+    int i;
+    printf("\nLocations:\n");
+    for (i = 0; i < g->n; i++) printf("  %d. %s\n", i + 1, g->names[i]);
+    r->source = getInt("Enter source location number: ", 1, g->n) - 1;
+    r->done = 0;
+    printf("Source selected: %s\n", g->names[r->source]);
+}
+ 
+void dijkstra(const Graph *g, Result *r)
+{
+    int visited[MAX] = {0};
+    int i, c, u, v, best;
+ 
+    for (i = 0; i < g->n; i++) { r->dist[i] = INF; r->parent[i] = -1; }
+    r->dist[r->source] = 0;
+ 
+    printf("\nDijkstra from %s\n", g->names[r->source]);
+    for (c = 0; c < g->n; c++) {
+        u = -1; best = INF;
+        for (i = 0; i < g->n; i++)
+            if (!visited[i] && r->dist[i] < best) { best = r->dist[i]; u = i; }
+        if (u == -1) break;
+        visited[u] = 1;
+        printf("\nStep %d: visit %s (dist = %d)\n", c + 1, g->names[u], r->dist[u]);
+        for (v = 0; v < g->n; v++) {
+            if (!visited[v] && g->adj[u][v] != INF &&
+                r->dist[u] + g->adj[u][v] < r->dist[v]) {
+                r->dist[v] = r->dist[u] + g->adj[u][v];
+                r->parent[v] = u;
+                printf("   %-22s improved to %d\n", g->names[v], r->dist[v]);
+            }
+        }
+    }
+    r->done = 1;
+    printf("\nDone.\n");
+}
+ 
+/* Iterative path reconstruction: fills path[] source->dest, returns length */
+int buildPath(const Result *r, int dest, int path[])
+{
+    int tmp[MAX], len = 0, v = dest, i;
+    while (v != -1) { tmp[len++] = v; v = r->parent[v]; }
+    for (i = 0; i < len; i++) path[i] = tmp[len - 1 - i];
+    return len;
+}
+ 
+void displayPaths(const Graph *g, const Result *r)
+{
+    int i, k, len, path[MAX];
+    printf("\nSource: %s\n\n%-22s %-18s %s\n", g->names[r->source], "Destination", "Shortest Distance", "Shortest Path");
+    printf("----------------------------------------------------------------------\n");
+    for (i = 0; i < g->n; i++) {
+        if (i == r->source) continue;
+        printf("%-22s ", g->names[i]);
+        if (r->dist[i] == INF) { printf("%-18s %s\n", "INF", "No path"); continue; }
+        printf("%-18d ", r->dist[i]);
+        len = buildPath(r, i, path);
+        for (k = 0; k < len; k++) printf("%s%s", k ? " -> " : "", g->names[path[k]]);
+        printf("\n");
+    }
+}
+ 
+void displayDistances(const Graph *g, const Result *r)
+{
+    int i;
+    printf("\nDistance from %s:\n", g->names[r->source]);
+    for (i = 0; i < g->n; i++) {
+        if (r->dist[i] == INF) printf("  %-22s : INF\n", g->names[i]);
+        else                   printf("  %-22s : %d\n", g->names[i], r->dist[i]);
+    }
+}
+ 
+int main(void)
+{
+    Graph g; Result r;
+    int ch, ready = 0;
+    r.source = -1; r.done = 0;
+ 
+    do {
+        printf("\n===== CAMPUS SHORTEST ROUTE FINDER (V2) =====\n");
+        printf("1. Enter Campus Graph\n2. Display Adjacency Matrix\n3. Select Source Location\n");
+        printf("4. Find Shortest Distance\n5. Display Shortest Paths\n");
+        printf("6. Display Distance from Source to All Locations\n7. Exit\n");
+        ch = getInt("Enter your choice (1-7): ", 1, 7);
+        if (ch >= 2 && ch <= 6 && !ready) { printf("\nEnter the graph first (option 1).\n"); continue; }
+        switch (ch) {
+        case 1: ready = enterGraph(&g, &r); break;
+        case 2: displayMatrix(&g); break;
+        case 3: selectSource(&g, &r); break;
+        case 4: if (r.source < 0) printf("\nSelect a source first (option 3).\n"); else dijkstra(&g, &r); break;
+        case 5: if (!r.done) printf("\nRun option 4 first.\n"); else displayPaths(&g, &r); break;
+        case 6: if (!r.done) printf("\nRun option 4 first.\n"); else displayDistances(&g, &r); break;
+        case 7: printf("\nExiting.\n"); break;
+        }
+    } while (ch != 7);
+    return 0;
+}
+ 
